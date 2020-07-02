@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"io"
@@ -106,13 +105,12 @@ func main() {
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist(domain),
+			Cache:      autocert.DirCache("certs"),
 		}
 
 		bretsGoAPIServer = &http.Server{
-			Addr: ":https",
-			TLSConfig: &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-			},
+			Addr:      ":https",
+			TLSConfig: certManager.TLSConfig(),
 		}
 
 		var wg sync.WaitGroup
