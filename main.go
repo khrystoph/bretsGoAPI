@@ -1,11 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"sync"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 const (
@@ -20,17 +25,19 @@ var (
 	//Warning is log handling for Warning level messaging
 	Warning *log.Logger
 	//Error is log handling for Error level messaging
-	Error          *log.Logger
-	traceHandle    io.Writer
-	infoHandle     io.Writer = os.Stdout
-	warningHandle  io.Writer = os.Stderr
-	errorHandle    io.Writer = os.Stderr
-	domain, ticker string
+	Error         *log.Logger
+	traceHandle   io.Writer
+	infoHandle    io.Writer = os.Stdout
+	warningHandle io.Writer = os.Stderr
+	errorHandle   io.Writer = os.Stderr
+	domain        string
+	ticker        = "amzn"
+	testing       bool
 )
 
 type quote struct {
-	stockTicker string
-	askPrice    float64
+	StockTicker string  `json:"ticker,omitempty"`
+	AskPrice    float64 `json:"price"`
 }
 
 func init() {
@@ -52,12 +59,12 @@ func init() {
 
 	flag.StringVar(&domain, "d", "example.com", "enter your fully qualified domain name here. Default: example.com")
 	flag.StringVar(&domain, "domain", "example.com", "enter your fully qualified domain name here. Default: example.com")
-	flag.StringVar(&ticker, "ticker", "amzn", "enter the ticker symbol you want")
+	flag.BoolVar(&testing, "testing", false, "set this flag if you want to disable running on SSL/TLS and run in unprotected mode")
 }
 
 //getGoogleQuote will make a request out to the google finance apis and return the close price for the day
 func getGoogleQuote(symbol string) (stockQuote quote, err error) {
-	stockQuote = quote{stockTicker: ticker, askPrice: 0.00}
+	stockQuote = quote{StockTicker: symbol, AskPrice: 0.00}
 	return stockQuote, nil
 }
 
@@ -65,11 +72,21 @@ func main() {
 	flag.Parse()
 
 	var (
-		helloHandler = func(w http.ResponseWriter, _ *http.Request) {
+		bretsGoAPIServer *http.Server
+		helloHandler     = func(w http.ResponseWriter, _ *http.Request) {
 			io.WriteString(w, "Welcome to Bret's API!\n")
 		}
 		quoteHandler = func(w http.ResponseWriter, req *http.Request) {
-			getGoogleQuote(ticker)
+			stockQuote, _ := getGoogleQuote(ticker)
+			//stockQuote := quote{ticker, 0.0}
+			stockQuoteString, err := json.Marshal(stockQuote)
+			if err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(stockQuoteString)
+			return
 		}
 	)
 
@@ -85,34 +102,38 @@ func main() {
 	http.HandleFunc("/", helloHandler)
 	http.HandleFunc("/quote", quoteHandler)
 
-	//certManager := autocert.Manager{
-	//	Prompt:     autocert.AcceptTOS,
-	//	HostPolicy: autocert.HostWhitelist(domain),
-	//}
+	if !testing {
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(domain),
+		}
 
-	//bretsGoAPIServer := &http.Server{
-	//	Addr: ":https",
-	//	TLSConfig: &tls.Config{
-	//		GetCertificate: certManager.GetCertificate,
-	//	},
-	//}
+		bretsGoAPIServer = &http.Server{
+			Addr: ":https",
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+			},
+		}
 
-	bretsGoAPIServer := &http.Server{
-		Addr: ":8080",
+		var wg sync.WaitGroup
+		Info.Printf("Starting the letsencrypt server\n")
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+			http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+		}()
+	} else {
+		bretsGoAPIServer = &http.Server{
+			Addr: ":8080",
+		}
 	}
 
-	//var wg sync.WaitGroup
-	Info.Printf("Starting the letsencrypt server\n")
-	//go func() {
-	//	wg.Add(1)
-	//	defer wg.Done()
-	//	http.ListenAndServe(":http", certManager.HTTPHandler(nil))
-	//}()
-
-	Info.Printf("Starting the main TLS server.\n")
-
-	Error.Fatal(bretsGoAPIServer.ListenAndServe())
-	//Error.Fatal(bretsGoAPIServer.ListenAndServeTLS("", ""))
+	if !testing {
+		Info.Printf("Starting the main TLS server.\n")
+		Error.Fatal(bretsGoAPIServer.ListenAndServeTLS("", ""))
+	} else {
+		Error.Fatal(bretsGoAPIServer.ListenAndServe())
+	}
 
 	return
 }
