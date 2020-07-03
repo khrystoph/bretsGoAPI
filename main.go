@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"log"
@@ -36,18 +37,23 @@ var (
 	testing       bool
 )
 
+type error interface {
+	Error() string
+}
+
 type quote struct {
 	StockTicker string  `json:"ticker,omitempty"`
-	AskPrice    float64 `json:"price"`
+	AskPrice    float64 `json:"price,omitempty"`
 }
 
 type quoteResponse struct {
-	Close         float64 `json:"c"`
-	High          float64 `json:"h"`
-	Low           float64 `json:"l"`
-	Open          float64 `json:"o"`
-	PreviousClose float64 `json:"pc"`
-	Timestamp     int64   `json:"t"`
+	Error         *string `jsoin:"error,omitempty"`
+	Close         float64 `json:"c,omitempty"`
+	High          float64 `json:"h,omitempty"`
+	Low           float64 `json:"l,omitempty"`
+	Open          float64 `json:"o,omitempty"`
+	PreviousClose float64 `json:"pc,omitempty"`
+	Timestamp     int64   `json:"t,omitempty"`
 }
 
 type requestString struct {
@@ -93,8 +99,15 @@ func getStockQuote(symbol string) (stockQuote quote, err error) {
 	if err != nil {
 		return
 	}
+	if stockQuoteResponse.Error != nil {
+		Info.Printf("Error set:%v  Error Message: %v", stockQuoteResponse.Error != nil, *stockQuoteResponse.Error)
+		stockQuote = quote{}
+		return stockQuote, errors.New(*stockQuoteResponse.Error)
+	}
+
 	Info.Printf("%v\n", stockQuoteResponse.Close)
 	stockQuote.AskPrice = stockQuoteResponse.Close
+
 	return stockQuote, nil
 }
 
@@ -114,7 +127,20 @@ func quoteHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	ticker = strings.ToUpper(ticker)
 	Info.Printf(ticker)
-	stockQuote, _ := getStockQuote(ticker)
+	stockQuote, err := getStockQuote(ticker)
+	Info.Printf("stock Quote: %v", stockQuote)
+	if err != nil {
+		Info.Printf("failed to get stock quote: %v", err)
+		errJSON := map[string]string{"error": err.Error()}
+		errJSONString, err := json.Marshal(errJSON)
+		if err != nil {
+			Info.Printf("Failed to marshal JSON in error handling %v", err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(errJSONString)
+	}
 	stockQuoteString, err := json.Marshal(stockQuote)
 	if err != nil {
 		return
