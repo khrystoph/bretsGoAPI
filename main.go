@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	quoteBaseURL = "http://finance.google.com/finance/"
+	quoteBaseURL  = "https://finnhub.io/api/v1/"
+	finnhubAPIKey = ""
 )
 
 var (
@@ -39,6 +40,19 @@ type quote struct {
 	AskPrice    float64 `json:"price"`
 }
 
+type quoteResponse struct {
+	Close         float64 `json:"c"`
+	High          float64 `json:"h"`
+	Low           float64 `json:"l"`
+	Open          float64 `json:"o"`
+	PreviousClose float64 `json:"pc"`
+	Timestamp     int64   `json:"t"`
+}
+
+type requestString struct {
+	JSONRequest string `json:"ticker"`
+}
+
 func init() {
 	Trace = log.New(traceHandle,
 		"TRACE: ",
@@ -61,10 +75,50 @@ func init() {
 	flag.BoolVar(&testing, "testing", false, "set this flag if you want to disable running on SSL/TLS and run in unprotected mode")
 }
 
-//getGoogleQuote will make a request out to the google finance apis and return the close price for the day
-func getGoogleQuote(symbol string) (stockQuote quote, err error) {
+//getStockQuote will make a request out to the finnhub apis and return the close price for the day
+func getStockQuote(symbol string) (stockQuote quote, err error) {
 	stockQuote = quote{StockTicker: symbol, AskPrice: 0.00}
+	getURL := quoteBaseURL + "quote?symbol=" + symbol + "&token=" + finnhubAPIKey
+	Info.Printf("URL Request: %s\n", getURL)
+	resp, err := http.Get(getURL)
+	if err != nil {
+		Error.Printf("Unable to retrieve ticker: %s", symbol)
+		return
+	}
+	defer resp.Body.Close()
+	decoder := json.NewDecoder(resp.Body)
+	var stockQuoteResponse quoteResponse
+	err = decoder.Decode(&stockQuoteResponse)
+	if err != nil {
+		return
+	}
+	Info.Printf("%v\n", stockQuoteResponse.Close)
+	stockQuote.AskPrice = stockQuoteResponse.Close
 	return stockQuote, nil
+}
+
+func quoteHandler(w http.ResponseWriter, req *http.Request) {
+	Info.Printf("%s\n", req.Method)
+	decoder := json.NewDecoder(req.Body)
+	var stockString requestString
+	err := decoder.Decode(&stockString)
+	if err != nil {
+		Error.Printf("failed to decode JSON. Panic!")
+		return
+	}
+	if req.Method == "POST" && stockString.JSONRequest != "" {
+		ticker = stockString.JSONRequest
+	}
+	Info.Printf(ticker)
+	stockQuote, _ := getStockQuote(ticker)
+	stockQuoteString, err := json.Marshal(stockQuote)
+	if err != nil {
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(stockQuoteString)
+	return
 }
 
 func main() {
@@ -74,18 +128,6 @@ func main() {
 		bretsGoAPIServer *http.Server
 		helloHandler     = func(w http.ResponseWriter, _ *http.Request) {
 			io.WriteString(w, "Welcome to Bret's API!\n")
-		}
-		quoteHandler = func(w http.ResponseWriter, req *http.Request) {
-			stockQuote, _ := getGoogleQuote(ticker)
-			//stockQuote := quote{ticker, 0.0}
-			stockQuoteString, err := json.Marshal(stockQuote)
-			if err != nil {
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(stockQuoteString)
-			return
 		}
 	)
 
@@ -99,7 +141,7 @@ func main() {
 	}
 
 	http.HandleFunc("/", helloHandler)
-	http.HandleFunc("/quote", quoteHandler)
+	http.HandleFunc("/api/v1/quote", quoteHandler)
 
 	if !testing {
 		certManager := autocert.Manager{
