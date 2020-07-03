@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -108,7 +109,10 @@ func quoteHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	if req.Method == "POST" && stockString.JSONRequest != "" {
 		ticker = stockString.JSONRequest
+	} else if stockString.JSONRequest == "" {
+		Error.Printf("empty input JSON. Using Default stock ticker: AMZN")
 	}
+	ticker = strings.ToUpper(ticker)
 	Info.Printf(ticker)
 	stockQuote, _ := getStockQuote(ticker)
 	stockQuoteString, err := json.Marshal(stockQuote)
