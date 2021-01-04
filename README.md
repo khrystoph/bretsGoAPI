@@ -17,6 +17,30 @@ This list will change as I continue to develop more of my needs, but will follow
 1. Send notifications when there are pending package updates
 1. Trigger Workflows to update packages
 
+## Usage
+The API currently has only one function: to make an API query against the finnhub API and return a stock quote to you. There's not a large advantage to this function just yet, but it will be used for more complex functions (like looking up multiple stocks in a portfolio to get total value of the portfolio). If you're using this in a production-like environment, you should be ensuring you're running the non-testing version (ie. feeding it a FQDN) so that it runs in SSL mode AND you should ensure that you have your own API key that you can feed to the docker container.  
+
+Avoid direct input of the API key (and use a secrets manager or lookup from some other secure source instead of providing it on the cli).  The API will allow for no credentials, but you will hit the limit on how many API calls you can make to finnhub without a key.
+
+There are three flags that you can provide to either the binary or to a docker container:
+1. `-testing` - This tells the go binary whether or not to run using TLS and auto-cert or to use port 8080.
+1. `-d` or `-domain` - This flag tells the binary what hostname we're looking for (FQDN) to set up the SSL cert, but also validates whether or not the request is going to the valid hostname.
+1. `-apikey` - Provide your Finnhub API key to the binary or to the docker container.
+
+To run the docker container, you need to run the following command (or similar):  
+
+```
+docker run -d --rm --name api_test -p 80:8080 <name_of_container_build_name> -d <your_domain_name_here> -testing -apikey <finnhub API key>
+```
+
+Once the docker container is running, you can interact with the api like this for testing purposes:
+
+```
+$ curl -X POST -H "Content-type: application/json" -H "Accept: application/json" -d '{"ticker":"BEP"}' http://localhost/api/v1/quote
+```
+
+
+
 ## Notes
 Some of these features may never get implemented, this is sort of a working list of ideas to track. 
 There will eventually be an auth system set up (specifically before this accepts more than just GET and POST requests, when there are mutating requests
