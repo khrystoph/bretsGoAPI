@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	quoteBaseURL  = "https://finnhub.io/api/v1/"
-	finnhubAPIKey = ""
+	quoteBaseURL = "https://finnhub.io/api/v1/"
 )
 
 var (
@@ -27,14 +26,14 @@ var (
 	//Warning is log handling for Warning level messaging
 	Warning *log.Logger
 	//Error is log handling for Error level messaging
-	Error         *log.Logger
-	traceHandle   io.Writer
-	infoHandle    io.Writer = os.Stdout
-	warningHandle io.Writer = os.Stderr
-	errorHandle   io.Writer = os.Stderr
-	domain        string
-	ticker        = "amzn"
-	testing       bool
+	Error                 *log.Logger
+	traceHandle           io.Writer
+	infoHandle            io.Writer = os.Stdout
+	warningHandle         io.Writer = os.Stderr
+	errorHandle           io.Writer = os.Stderr
+	domain, finnhubAPIKey string
+	ticker                = "amzn"
+	testing               bool
 )
 
 type error interface {
@@ -80,6 +79,7 @@ func init() {
 	flag.StringVar(&domain, "d", "example.com", "enter your fully qualified domain name here. Default: example.com")
 	flag.StringVar(&domain, "domain", "example.com", "enter your fully qualified domain name here. Default: example.com")
 	flag.BoolVar(&testing, "testing", false, "set this flag if you want to disable running on SSL/TLS and run in unprotected mode")
+	flag.StringVar(&finnhubAPIKey, "apikey", "", "enter your finnhub API key to use ")
 }
 
 //getStockQuote will make a request out to the finnhub apis and return the close price for the day
