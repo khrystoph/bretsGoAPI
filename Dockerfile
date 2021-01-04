@@ -12,5 +12,5 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -o bretsAPI .
+RUN go build -o bretsAPI ./src/
 ENTRYPOINT ["./bretsAPI"]
